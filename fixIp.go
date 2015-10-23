@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"io/ioutil"
+	"net/http/httputil"
 //	"strings"
 //	"net/http/httptest"
 //	"net/url"
@@ -19,31 +20,20 @@ type ResponseAuth struct {
 
 func main() {
 	var err error
-	credential := map[string]interface{}{
+	credential := map[string]string{
 		"username": "admin",
 		"password": "",
 	}
 
-	credentialJson, _ := json.Marshal(credential)
-	contentReader := bytes.NewReader(credentialJson)
+	contentReader := bytes.NewReader([]byte("username="+credential["username"]+"&password="+credential["password"]))
 	req, _ := http.NewRequest("POST", "http://192.168.1.1/htdocs/login/login.lua", contentReader)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Notes","Get MAC address form switch port")
+	dump, _ := httputil.DumpRequestOut(req, true)
+	fmt.Printf("%s",dump)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Println(err)
 	}
-	defer resp.Body.Close()
-	body,err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("error ReadAll:", err)
-	}
-	var responseAuth ResponseAuth
-	err = json.Unmarshal(body, &responseAuth)
-	if err != nil {
-		fmt.Println("error Unmarshal:", err)
-	}
-	fmt.Printf("Redirect: %v\n", responseAuth.Redirect)
-	fmt.Printf("Error: %v\n", responseAuth.Error)
+	fmt.Printf("Status: %v\n", resp.Status)
 }
