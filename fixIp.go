@@ -33,16 +33,18 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 	option broadcast-address 192.168.4.255;
 	option routers 192.168.4.9;
 	option domain-name-servers 8.8.8.8, 8.8.4.4;
-	option domain-name \"aiyara.lab.sut.ac.th\";
+	option domain-name "aiyara.lab.sut.ac.th";
 } 
 
-######### reserv ip  ########
-`
+######### reserv ip  ########`
 var body = ""
 for ip,mac := range ipAndMacMapping {
 	body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
 }
-
+err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
+if err != nil {
+	fmt.Printf("error writefile: %s",err)
+}
 fmt.Println(header + body)
 }
 
@@ -123,7 +125,7 @@ func main() {
 	if err != nil {
 		fmt.Printf("error Request: %s", err)
 	}
-	
+
 	//build configuration file
 	saveDhcpConf()
 }
