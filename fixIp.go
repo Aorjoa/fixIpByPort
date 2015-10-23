@@ -11,11 +11,40 @@ import (
 	"strings"
 	"strconv"
 )
-
+var ipRange = "192.168.4"
+var linkPort = []string{"47"}
 type ResponseAuth struct {
 		Redirect	string `json:"redirect"`
 		Error		string `json:"error"`
 	}
+
+var ipAndMacMapping = map[string]string{}
+
+func saveDhcpConf(){
+	var header = `
+############ SETTING ############
+######### set dhcp range ########
+
+default-lease-time 600;
+max-lease-time 7200;
+subnet 192.168.4.0 netmask 255.255.255.0 {
+	range 192.168.4.11 192.168.4.200;
+	option subnet-mask 255.255.255.0;
+	option broadcast-address 192.168.4.255;
+	option routers 192.168.4.9;
+	option domain-name-servers 8.8.8.8, 8.8.4.4;
+	option domain-name \"aiyara.lab.sut.ac.th\";
+} 
+
+######### reserv ip  ########
+`
+var body = ""
+for ip,mac := range ipAndMacMapping {
+	body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
+}
+
+fmt.Println(header + body)
+}
 
 func main() {
 	var err error
@@ -79,7 +108,8 @@ func main() {
 		if strings.HasPrefix(line, "['") && strings.HasSuffix(line, "']")  {
 			lineAttr := strings.Split(string(line),"', '")
 			if _,err = strconv.Atoi(lineAttr[2]); err == nil {
-				fmt.Println(lineAttr[1] + " " + lineAttr[2])
+				fmt.Println(lineAttr[2] + " " + lineAttr[1])
+				ipAndMacMapping[lineAttr[2]] = lineAttr[1]
 			}
 		}
 	}
@@ -93,4 +123,16 @@ func main() {
 	if err != nil {
 		fmt.Printf("error Request: %s", err)
 	}
+	
+	//build configuration file
+	saveDhcpConf()
+}
+
+func contains(slice []interface{}, element interface{}) bool {
+    for _, item := range slice {
+        if item == element {
+            return true
+        }
+    }
+    return false
 }
