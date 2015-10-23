@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http/httputil"
 	"net/http/cookiejar"
+	"strings"
 )
 
 type ResponseAuth struct {
@@ -62,22 +63,19 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	// client := &http.Client{
-	//     Jar: cookieJar,
-	// }
+	
 	resp, err = client.Do(req)
 	if err != nil {
 		fmt.Printf("error Request: %s", err)
 	}
 	body,err = ioutil.ReadAll(resp.Body)
-	fmt.Printf("RES: %s\n", body)
-//fmt.Printf("Cookie: %v\n", resp.Cookie)
-	// resp, err = http.Get("http://192.168.1.1/htdocs/pages/base/mac_address_table.lsp")
-	
- //    if err != nil {
- //        fmt.Printf("error MAC table: %s", err)
- //    }
- //    defer resp.Body.Close()
- //    body,err = ioutil.ReadAll(resp.Body)
- //    fmt.Printf("\n%s",body)
+	if err != nil {
+		fmt.Printf("error ReadAll: %s", err)
+	}
+	bodyByLine := strings.Split(string(body),"\n")
+	for _,line := range bodyByLine {
+		if strings.HasPrefix(line, "['") && strings.HasSuffix(line, "']")  {
+			fmt.Println(line)
+		}
+	}
 }
