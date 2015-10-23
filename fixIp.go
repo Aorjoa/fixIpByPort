@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/http/cookiejar"
 	"strings"
+	"strconv"
 )
 
 type ResponseAuth struct {
@@ -22,7 +23,7 @@ func main() {
 		"username": "admin",
 		"password": "",
 	}
-
+	// Create cookie.
   	cookieJar, _ := cookiejar.New(nil)
 
 	contentReader := bytes.NewReader([]byte("username="+credential["username"]+"&password="+credential["password"]))
@@ -63,7 +64,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	
+	req.Header.Set("Cache-Control", "no-cache")
 	resp, err = client.Do(req)
 	if err != nil {
 		fmt.Printf("error Request: %s", err)
@@ -73,9 +74,23 @@ func main() {
 		fmt.Printf("error ReadAll: %s", err)
 	}
 	bodyByLine := strings.Split(string(body),"\n")
+	//lineAttr := []string{}
 	for _,line := range bodyByLine {
 		if strings.HasPrefix(line, "['") && strings.HasSuffix(line, "']")  {
-			fmt.Println(line)
+			lineAttr := strings.Split(string(line),"', '")
+			if _,err = strconv.Atoi(lineAttr[2]); err == nil {
+				fmt.Println(lineAttr[1] + " " + lineAttr[2])
+			}
 		}
+	}
+
+	// Logout to clear session (because it's limited).
+	req, err = http.NewRequest("GET", "http://192.168.1.1/htdocs/pages/main/logout.lsp", nil)
+	if err != nil {
+		fmt.Println(err)
+	}
+	resp, err = client.Do(req)
+	if err != nil {
+		fmt.Printf("error Request: %s", err)
 	}
 }
