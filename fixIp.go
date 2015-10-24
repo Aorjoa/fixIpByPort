@@ -13,7 +13,8 @@ import (
 	"regexp"
 )
 var ipRange = "192.168.4"
-var linkPort = []string{"47","48","49","50","51","52"}
+var linkPort1810 = []string{"47","48","49","50","51","52"}
+var linkPort1820 = []string{"47","48","49","50","51","52"}
 type ResponseAuth struct {
 		Redirect	string `json:"redirect"`
 		Error		string `json:"error"`
@@ -26,10 +27,10 @@ func main() {
 		fmt.Println("Error : cannot get 1810")
 		return
 	}
-	// if !checkSwitch1820() {
-	// 	fmt.Println("Error : cannot get 1820")
-	// 	return
-	// }
+	if !checkSwitch1820() {
+		fmt.Println("Error : cannot get 1820")
+		return
+	}
 	//build configuration file
 	saveDhcpConf()
 }
@@ -53,9 +54,7 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 ######### reserv ip  ########`
 var body = ""
 for ip,mac := range ipAndMacMapping {
-	if !contains(linkPort,ip) {
 		body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
-	}
 }
 
 err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
@@ -65,7 +64,7 @@ if err != nil {
 fmt.Println(header + body)
 }
 
-func checkSwitch1810() bool{
+func checkSwitch1810() bool {
 	var err error
 	var password = ""
 	// Create cookie.
@@ -96,7 +95,6 @@ func checkSwitch1810() bool{
 	}
 
 	bodyByLine := strings.Split(string(body),"\n")
-	//lineAttr := []string{}
 	for _,line := range bodyByLine {
 		if line == `<td><INPUT class="inputfield" type="password" name="pwd" SIZE="10" MAXLENGTH="128" VALUE=""></td>`  {
 			return false
@@ -132,7 +130,9 @@ func checkSwitch1810() bool{
 			lineAttr := strings.Split(mapIpAndPort,",,")
 			if _,err = strconv.Atoi(lineAttr[3]); err == nil {
 				fmt.Println(lineAttr[3] + " " + lineAttr[1])
-				ipAndMacMapping[lineAttr[3]] = lineAttr[1]
+				if !contains(linkPort1810,lineAttr[3]) {
+					ipAndMacMapping[lineAttr[3]] = lineAttr[1]
+				}
 			}
 		}
 	}
@@ -149,7 +149,7 @@ func checkSwitch1810() bool{
 	return true
 }
 
-func checkSwitch1820() {
+func checkSwitch1820() bool {
 	var err error
 	credential := map[string]string{
 		"username": "admin",
@@ -159,7 +159,7 @@ func checkSwitch1820() {
   	cookieJar, _ := cookiejar.New(nil)
 
 	contentReader := bytes.NewReader([]byte("username="+credential["username"]+"&password="+credential["password"]))
-	req, err := http.NewRequest("POST", "http://192.168.4.1/htdocs/login/login.lua", contentReader)
+	req, err := http.NewRequest("POST", "http://192.168.4.4/htdocs/login/login.lua", contentReader)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -187,12 +187,14 @@ func checkSwitch1820() {
 	if err != nil {
 		fmt.Printf("error Unmarshal: %s", err)
 	}
-	fmt.Printf("Redirect: %v\n", responseAuth.Redirect)
-	fmt.Printf("Error: %v\n", responseAuth.Error)
+
 	fmt.Printf("Status: %v\n", resp.Status)
+	if resp.Status != "200 OK" {
+		return false
+	}
 
 
-	req, err = http.NewRequest("GET", "http://192.168.1.1/htdocs/pages/base/mac_address_table.lsp", nil)
+	req, err = http.NewRequest("GET", "http://192.168.4.4/htdocs/pages/base/mac_address_table.lsp", nil)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -206,13 +208,16 @@ func checkSwitch1820() {
 		fmt.Printf("error ReadAll: %s", err)
 	}
 	bodyByLine := strings.Split(string(body),"\n")
-	//lineAttr := []string{}
 	for _,line := range bodyByLine {
 		if strings.HasPrefix(line, "['") && strings.HasSuffix(line, "']")  {
 			lineAttr := strings.Split(string(line),"', '")
-			if _,err = strconv.Atoi(lineAttr[2]); err == nil {
-				fmt.Println(lineAttr[2] + " " + lineAttr[1])
-				ipAndMacMapping[lineAttr[2]] = lineAttr[1]
+			if ip,err := strconv.Atoi(lineAttr[2]); err == nil {
+				ipBox2 := strconv.Itoa(ip+46)
+				fmt.Println(ipBox2 + " " + lineAttr[1])
+				if !contains(linkPort1820,lineAttr[2]) {
+					ipAndMacMapping[ipBox2] = lineAttr[1]
+				}
+
 			}
 		}
 	}
@@ -226,6 +231,7 @@ func checkSwitch1820() {
 	if err != nil {
 		fmt.Printf("error Request: %s", err)
 	}
+	return true
 }
 
 func contains(slice []string, element string) bool {
