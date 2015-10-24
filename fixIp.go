@@ -39,7 +39,9 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 ######### reserv ip  ########`
 var body = ""
 for ip,mac := range ipAndMacMapping {
-	body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
+	if !contains(linkPort,ip) {
+		body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
+	}
 }
 err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
 if err != nil {
@@ -130,7 +132,7 @@ func main() {
 	saveDhcpConf()
 }
 
-func contains(slice []interface{}, element interface{}) bool {
+func contains(slice []string, element string) bool {
     for _, item := range slice {
         if item == element {
             return true
