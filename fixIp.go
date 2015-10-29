@@ -8,9 +8,9 @@ import (
 //	"io"
 	"os"
 	"bufio"
-//	"strings"	
+	"strings"	
 //	"strconv"
-//	"regexp"
+	"regexp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -54,7 +54,6 @@ func checkSwitchSg500() bool {
 		defer session.Close()
 		// Set up terminal modes
 		modes := ssh.TerminalModes{
-		//	ssh.ECHO:          0,     // disable echoing
 			ssh.TTY_OP_ISPEED: 115200,
 			ssh.TTY_OP_OSPEED: 115200,
 		}
@@ -78,19 +77,34 @@ func checkSwitchSg500() bool {
 			}
 			stdin.Write([]byte("show mac address-table\n"))
 			scanner := bufio.NewScanner(stdout)
+			printMacTable := false
+			regMacAddr := regexp.MustCompile(`([0-9a-f]{2}[:-]){5}([0-9a-f]{2})\s+[a-z]{2}\d+/\d+/\d+`)
+
 			for scanner.Scan() {
-				s := scanner.Text() // Println will add back the final '\n'
-				fmt.Println([]byte(s))
-				if (s == "SW-1#"){
-					fmt.Println("===END===")
-				}	
+				s := scanner.Text()
+				findMac := regMacAddr.FindString(s)
+				if len(findMac) > 0 {
+					lineMacIpSplit := strings.Fields(findMac)
+					getMac := lineMacIpSplit[0]
+					getIp := strings.Split(lineMacIpSplit[1],"/")[2]
+					if !contains(linkPortSw,getIp){
+						ipAndMacMapping[getIp] = getMac
+					}
+				//lineBuffer = append(lineBuffer,s)
+				}else if (strings.HasPrefix(s,"  Vlan        Mac Address         Port       Type    ")){
+					printMacTable = true
+				}
+				if (len([]byte(s)) == 0 && printMacTable) {
+					stdin.Write([]byte("exit\n"))
+					client.Close()
+					session.Close()
+				}
 			}
 			if err := scanner.Err(); err != nil {
 				fmt.Fprintln(os.Stderr, "reading standard input:", err)
 			}
 
 	}
-	fmt.Println("\n<<< SSH SESSION EXPIRED >>>")
 	return true
 }
 
