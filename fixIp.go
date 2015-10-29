@@ -6,7 +6,8 @@ import (
 	"io/ioutil"
 	"os"
 	"bufio"
-	"strings"	
+	"strings"
+	"strconv"	
 	"regexp"
 	"golang.org/x/crypto/ssh"
 )
@@ -14,7 +15,8 @@ import (
 //Setting
 var ipSw = []string{"192.168.4.3","192.168.4.4"}
 var ipDhcpRange = "192.168.4"
-var linkPortSw = []string{"49","50","51","52"}
+var linkPortSw = []int{49,50,51,52}
+var newIpLv = 48
 var config = &ssh.ClientConfig{
     User: "cisco",
     Auth: []ssh.AuthMethod{
@@ -25,7 +27,7 @@ var config = &ssh.ClientConfig{
 	},
 }
 
-var ipAndMacMapping = map[string]string{}
+var ipAndMacMapping = map[int]string{}
 
 func main() {
 	if !checkSwitchSg500() {
@@ -38,7 +40,7 @@ func main() {
 
 
 func checkSwitchSg500() bool {
-	for _,ip := range ipSw {
+	for swLevel,ip := range ipSw {
 		client, err := ssh.Dial("tcp", ip+":22", config)
 		if err != nil {
 			panic("Failed to dial: " + err.Error())
@@ -83,8 +85,11 @@ func checkSwitchSg500() bool {
 				if len(findMac) > 0 {
 					lineMacIpSplit := strings.Fields(findMac)
 					getMac := lineMacIpSplit[0]
-					getIp := strings.Split(lineMacIpSplit[1],"/")[2]
-					if !contains(linkPortSw,getIp){
+					getIp,_ := strconv.Atoi(strings.Split(lineMacIpSplit[1],"/")[2])
+					if(swLevel > 0){
+						getIp = getIp+(newIpLv*swLevel)
+					}
+					if !contains(linkPortSw,getIp-(newIpLv*swLevel)){
 						ipAndMacMapping[getIp] = getMac
 					}
 				//lineBuffer = append(lineBuffer,s)
@@ -105,7 +110,7 @@ func checkSwitchSg500() bool {
 	return true
 }
 
-func contains(slice []string, element string) bool {
+func contains(slice []int, element int) bool {
     for _, item := range slice {
         if item == element {
             return true
@@ -133,7 +138,7 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 ######### reserv ip  ########`
 var body = ""
 for ip,mac := range ipAndMacMapping {
-		body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipDhcpRange, ip)
+		body = fmt.Sprintf("%s\nport-%d { hardware ethernet %s; fixed-address %s.%d; }", body, ip, mac, ipDhcpRange, ip)
 }
 
 err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
