@@ -1,15 +1,12 @@
 package main
 
 import (
-	// "bytes"
 	"fmt"
 	"log"
 	"io/ioutil"
-//	"io"
 	"os"
 	"bufio"
 	"strings"	
-//	"strconv"
 	"regexp"
 	"golang.org/x/crypto/ssh"
 )
@@ -107,8 +104,6 @@ func checkSwitchSg500() bool {
 	}
 	return true
 }
-
-
 
 func contains(slice []string, element string) bool {
     for _, item := range slice {
