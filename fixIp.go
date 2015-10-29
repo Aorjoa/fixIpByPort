@@ -54,9 +54,9 @@ func checkSwitchSg500() bool {
 		defer session.Close()
 		// Set up terminal modes
 		modes := ssh.TerminalModes{
-			ssh.ECHO:          0,     // disable echoing
-			ssh.TTY_OP_ISPEED: 14400,
-			ssh.TTY_OP_OSPEED: 14400,
+		//	ssh.ECHO:          0,     // disable echoing
+			ssh.TTY_OP_ISPEED: 115200,
+			ssh.TTY_OP_OSPEED: 115200,
 		}
 		// Request pseudo terminal
 			if err := session.RequestPty("vt100", 0, 200, modes); err != nil {
@@ -76,10 +76,14 @@ func checkSwitchSg500() bool {
 			if err := session.Shell(); err != nil {
 				log.Fatalf("failed to start shell: %s", err)
 			}
-			stdin.Write([]byte("show mac address-table\r\n"))
+			stdin.Write([]byte("show mac address-table\n"))
 			scanner := bufio.NewScanner(stdout)
 			for scanner.Scan() {
-				fmt.Println(scanner.Text()) // Println will add back the final '\n'
+				s := scanner.Text() // Println will add back the final '\n'
+				fmt.Println([]byte(s))
+				if (s == "SW-1#"){
+					fmt.Println("===END===")
+				}	
 			}
 			if err := scanner.Err(); err != nil {
 				fmt.Fprintln(os.Stderr, "reading standard input:", err)
