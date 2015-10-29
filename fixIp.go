@@ -1,38 +1,104 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
+	// "bytes"
 	"fmt"
-	"net/http"
+	"log"
 	"io/ioutil"
-	"net/http/httputil"
-	"net/http/cookiejar"
-	"strings"
-	"strconv"
-	"regexp"
+//	"io"
+	"os"
+	"bufio"
+//	"strings"	
+//	"strconv"
+//	"regexp"
+	"golang.org/x/crypto/ssh"
 )
-var ipRange = "192.168.4"
-var linkPort1810 = []string{"47","48","49","50","51","52"}
-var linkPort1820 = []string{"47","48","49","50","51","52"}
-type ResponseAuth struct {
-		Redirect	string `json:"redirect"`
-		Error		string `json:"error"`
-	}
+
+//Setting
+var ipSw = []string{"192.168.4.3","192.168.4.4"}
+var ipDhcpRange = "192.168.4"
+var linkPortSw = []string{"49","50","51","52"}
+var config = &ssh.ClientConfig{
+    User: "cisco",
+    Auth: []ssh.AuthMethod{
+        ssh.Password("sut@1234"),
+    },
+    Config: ssh.Config{
+			Ciphers: []string{"aes128-cbc"}, // not currently supported
+	},
+}
 
 var ipAndMacMapping = map[string]string{}
 
 func main() {
-	if !checkSwitch1810() {
-		fmt.Println("Error : cannot get 1810")
-		return
-	}
-	if !checkSwitch1820() {
-		fmt.Println("Error : cannot get 1820")
+	if !checkSwitchSg500() {
+		fmt.Println("Error : cannot get SG500")
 		return
 	}
 	//build configuration file
 	saveDhcpConf()
+}
+
+
+func checkSwitchSg500() bool {
+	for _,ip := range ipSw {
+		client, err := ssh.Dial("tcp", ip+":22", config)
+		if err != nil {
+			panic("Failed to dial: " + err.Error())
+		}
+		defer client.Close()
+		session, err := client.NewSession()
+		if err != nil {
+			log.Fatalf("unable to create session: %s", err)
+		}
+		defer session.Close()
+		// Set up terminal modes
+		modes := ssh.TerminalModes{
+			ssh.ECHO:          0,     // disable echoing
+			ssh.TTY_OP_ISPEED: 14400,
+			ssh.TTY_OP_OSPEED: 14400,
+		}
+		// Request pseudo terminal
+			if err := session.RequestPty("vt100", 0, 200, modes); err != nil {
+				log.Fatalf("request for pseudo terminal failed: %s", err)
+			}
+			stdin, err := session.StdinPipe()
+			if err != nil {
+				log.Fatalf("Unable to setup stdin for session: %v\n", err)
+			}
+
+			stdout, err := session.StdoutPipe()
+			if err != nil {
+				log.Fatalf("Unable to setup stdout for session: %v\n", err)
+			}
+
+		// Start remote shell
+			if err := session.Shell(); err != nil {
+				log.Fatalf("failed to start shell: %s", err)
+			}
+			stdin.Write([]byte("show mac address-table\r\n"))
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				fmt.Println(scanner.Text()) // Println will add back the final '\n'
+			}
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintln(os.Stderr, "reading standard input:", err)
+			}
+
+	}
+	fmt.Println("\n<<< SSH SESSION EXPIRED >>>")
+	return true
+}
+
+
+
+func contains(slice []string, element string) bool {
+    for _, item := range slice {
+        if item == element {
+            return true
+        }
+    }
+    return false
 }
 
 func saveDhcpConf(){
@@ -54,7 +120,7 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 ######### reserv ip  ########`
 var body = ""
 for ip,mac := range ipAndMacMapping {
-		body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
+		body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipDhcpRange, ip)
 }
 
 err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
@@ -62,183 +128,4 @@ if err != nil {
 	fmt.Printf("error writefile: %s",err)
 }
 fmt.Println(header + body)
-}
-
-func checkSwitch1810() bool {
-	var err error
-	var password = ""
-	// Create cookie.
-  	cookieJar, _ := cookiejar.New(nil)
-
-	contentReader := bytes.NewReader([]byte("pwd="+password))
-	req, err := http.NewRequest("POST", "http://192.168.4.3/hp_login.html", contentReader)
-	if err != nil {
-		fmt.Println(err)
-	}
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	dump, _ := httputil.DumpRequestOut(req, true)
-	fmt.Printf("==== REQ ====\n%s\n=============\n",dump)
-	client := &http.Client{
-	    Jar: cookieJar,
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Printf("error Request: %s", err)
-	}
-	defer resp.Body.Close()
-
-	body,err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("error ReadAll: %s", err)
-	}
-
-	bodyByLine := strings.Split(string(body),"\n")
-	for _,line := range bodyByLine {
-		if line == `<td><INPUT class="inputfield" type="password" name="pwd" SIZE="10" MAXLENGTH="128" VALUE=""></td>`  {
-			return false
-		}
-	}
-
-	fmt.Printf("Status: %v\n", resp.Status)
-
-
-	req, err = http.NewRequest("GET", "http://192.168.4.3/FDBSearch.html", nil)
-	if err != nil {
-		fmt.Println(err)
-	}
-	req.Header.Set("Cache-Control", "no-cache")
-	resp, err = client.Do(req)
-	if err != nil {
-		fmt.Printf("error Request: %s", err)
-	}
-	body,err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("error ReadAll: %s", err)
-	}
-	bodyByLine = strings.Split(string(body),"\n")
-	//lineAttr := []string{}
-	reg, err := regexp.Compile(`<tr><td CLASS="\w*" style="display: none;">|<td CLASS="\w*">|</td>|</td></tr>|</tr>`)
-        if err != nil {
-            fmt.Println(err)
-        }
-   
-	for _,line := range bodyByLine {
-		if strings.HasPrefix(line, `<tr><td CLASS=`) && strings.HasSuffix(line, `</td></tr>`)  {
-			mapIpAndPort := reg.ReplaceAllString(line, ",")
-			lineAttr := strings.Split(mapIpAndPort,",,")
-			if _,err = strconv.Atoi(lineAttr[3]); err == nil {
-				fmt.Println(lineAttr[3] + " " + lineAttr[1])
-				if !contains(linkPort1810,lineAttr[3]) {
-					ipAndMacMapping[lineAttr[3]] = lineAttr[1]
-				}
-			}
-		}
-	}
-
-	// Logout to clear session (because it's limited).
-	req, err = http.NewRequest("GET", "http://192.168.4.3/hp_login.html", nil)
-	if err != nil {
-		fmt.Println(err)
-	}
-	resp, err = client.Do(req)
-	if err != nil {
-		fmt.Printf("error Request: %s", err)
-	}
-	return true
-}
-
-func checkSwitch1820() bool {
-	var err error
-	credential := map[string]string{
-		"username": "admin",
-		"password": "",
-	}
-	// Create cookie.
-  	cookieJar, _ := cookiejar.New(nil)
-
-	contentReader := bytes.NewReader([]byte("username="+credential["username"]+"&password="+credential["password"]))
-	req, err := http.NewRequest("POST", "http://192.168.4.4/htdocs/login/login.lua", contentReader)
-	if err != nil {
-		fmt.Println(err)
-	}
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	dump, _ := httputil.DumpRequestOut(req, true)
-	fmt.Printf("==== REQ ====\n%s\n=============\n",dump)
-	client := &http.Client{
-	    Jar: cookieJar,
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Printf("error Request: %s", err)
-	}
-	defer resp.Body.Close()
-
-	body,err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("error ReadAll: %s", err)
-	}
-
-	var responseAuth ResponseAuth
-	err = json.Unmarshal(body, &responseAuth)
-	if err != nil {
-		fmt.Printf("error Unmarshal: %s", err)
-	}
-
-	fmt.Printf("Status: %v\n", resp.Status)
-	if resp.Status != "200 OK" {
-		return false
-	}
-
-
-	req, err = http.NewRequest("GET", "http://192.168.4.4/htdocs/pages/base/mac_address_table.lsp", nil)
-	if err != nil {
-		fmt.Println(err)
-	}
-	req.Header.Set("Cache-Control", "no-cache")
-	resp, err = client.Do(req)
-	if err != nil {
-		fmt.Printf("error Request: %s", err)
-	}
-	body,err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("error ReadAll: %s", err)
-	}
-	bodyByLine := strings.Split(string(body),"\n")
-	for _,line := range bodyByLine {
-		if strings.HasPrefix(line, "['") && strings.HasSuffix(line, "']")  {
-			lineAttr := strings.Split(string(line),"', '")
-			if ip,err := strconv.Atoi(lineAttr[2]); err == nil {
-				ipBox2 := strconv.Itoa(ip+46)
-				fmt.Println(ipBox2 + " " + lineAttr[1])
-				if !contains(linkPort1820,lineAttr[2]) {
-					ipAndMacMapping[ipBox2] = lineAttr[1]
-				}
-
-			}
-		}
-	}
-
-	// Logout to clear session (because it's limited).
-	req, err = http.NewRequest("GET", "http://192.168.4.4/htdocs/pages/main/logout.lsp", nil)
-	if err != nil {
-		fmt.Println(err)
-	}
-	resp, err = client.Do(req)
-	if err != nil {
-		fmt.Printf("error Request: %s", err)
-	}
-	return true
-}
-
-func contains(slice []string, element string) bool {
-    for _, item := range slice {
-        if item == element {
-            return true
-        }
-    }
-    return false
 }
