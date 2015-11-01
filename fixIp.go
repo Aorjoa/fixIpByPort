@@ -13,10 +13,16 @@ import (
 )
 
 //Setting
-var ipSw = []string{"192.168.4.3","192.168.4.4"}
+var ipSw = "192.168.4.254"
 var ipDhcpRange = "192.168.4"
-var linkPortSw = []int{49,50,51,52}
-var newIpLv = 48
+var ipStartAt = 100
+var linkPortSw = [][]int{{25,26,27,28},{49,50,51,52}}
+var sw2Mapper = map[int]int{
+    1: 101,		2: 102,		3: 103,		4: 104,		5: 49,		6: 50,		7: 51,		8: 52,		9: 53,		10: 54,		11: 55,		12: 56,
+    13: 105,	14: 106,	15: 107,	16: 108,	17: 57,		18: 58,		19: 59,		20: 60,		21: 61,		22: 62,		23: 63,		24: 64,
+    //Link port
+    25: 25,  26: 26, 27: 27,  28: 28,
+}
 var config = &ssh.ClientConfig{
     User: "cisco",
     Auth: []ssh.AuthMethod{
@@ -30,6 +36,7 @@ var config = &ssh.ClientConfig{
 var ipAndMacMapping = map[int]string{}
 
 func main() {
+
 	if !checkSwitchSg500() {
 		fmt.Println("Error : cannot get SG500")
 		return
@@ -40,8 +47,7 @@ func main() {
 
 
 func checkSwitchSg500() bool {
-	for swLevel,ip := range ipSw {
-		client, err := ssh.Dial("tcp", ip+":22", config)
+		client, err := ssh.Dial("tcp", ipSw+":22", config)
 		if err != nil {
 			panic("Failed to dial: " + err.Error())
 		}
@@ -69,7 +75,6 @@ func checkSwitchSg500() bool {
 			if err != nil {
 				log.Fatalf("Unable to setup stdout for session: %v\n", err)
 			}
-
 		// Start remote shell
 			if err := session.Shell(); err != nil {
 				log.Fatalf("failed to start shell: %s", err)
@@ -85,12 +90,19 @@ func checkSwitchSg500() bool {
 				if len(findMac) > 0 {
 					lineMacIpSplit := strings.Fields(findMac)
 					getMac := lineMacIpSplit[0]
-					getIp,_ := strconv.Atoi(strings.Split(lineMacIpSplit[1],"/")[2])
-					if(swLevel > 0){
-						getIp = getIp+(newIpLv*swLevel)
+					intId := strings.Split(lineMacIpSplit[1],"/")
+					getIp, err := strconv.Atoi(intId[2]); if err != nil {
+						return false
 					}
-					if !contains(linkPortSw,getIp-(newIpLv*swLevel)){
-						ipAndMacMapping[getIp] = getMac
+					intGetSw, err := strconv.Atoi(strings.Replace(intId[0],"gi","",-1)); if err != nil {
+						return false
+					}
+					swLevel := intGetSw-1	
+					if(swLevel == 0){
+						getIp = sw2Mapper[getIp]	
+					}
+					if !contains(linkPortSw[swLevel],getIp) {
+						ipAndMacMapping[getIp+ipStartAt] = getMac
 					}
 				//lineBuffer = append(lineBuffer,s)
 				}else if (strings.HasPrefix(s,"  Vlan        Mac Address         Port       Type    ")){
@@ -106,7 +118,6 @@ func checkSwitchSg500() bool {
 				fmt.Fprintln(os.Stderr, "reading standard input:", err)
 			}
 
-	}
 	return true
 }
 
@@ -127,7 +138,7 @@ func saveDhcpConf(){
 default-lease-time 600;
 max-lease-time 7200;
 subnet 192.168.4.0 netmask 255.255.255.0 {
-	range 192.168.4.11 192.168.4.200;
+	range 192.168.4.100 192.168.4.200;
 	option subnet-mask 255.255.255.0;
 	option broadcast-address 192.168.4.255;
 	option routers 192.168.4.9;
