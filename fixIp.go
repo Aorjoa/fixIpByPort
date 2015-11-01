@@ -80,6 +80,7 @@ func checkSwitchSg500() bool {
 			if err := session.Shell(); err != nil {
 				log.Fatalf("failed to start shell: %s", err)
 			}
+			stdin.Write([]byte("terminal datadump\n"))
 			stdin.Write([]byte("show mac address-table\n"))
 			scanner := bufio.NewScanner(stdout)
 			printMacTable := false
@@ -151,7 +152,7 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 
 var body = ""
 for ip,mac := range ipAndMacMapping {
-		body = fmt.Sprintf("%s\nport-%d { hardware ethernet %s; fixed-address %s.%d; }", body, ip, mac, ipDhcpRange, ip)
+		body = fmt.Sprintf("%s\nhost port-%d {hardware ethernet %s; fixed-address %s.%d; }", body, ip, mac, ipDhcpRange, ip)
 }
 
 err := ioutil.WriteFile("/etc/dhcp/dhcpd.conf", []byte(header+body), 0644)
@@ -161,6 +162,7 @@ if err != nil {
 cmd := exec.Command("service", "isc-dhcp-server", "restart") 
 err = cmd.Run()
 if err != nil {
+	panic(err)
 	log.Fatalf("Cannot restart service %s",err)
 }
 //fmt.Println(header + body)
