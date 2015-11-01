@@ -5,6 +5,7 @@ import (
 	"log"
 	"io/ioutil"
 	"bufio"
+	"os/exec"
 	"strings"
 	"strconv"	
 	"regexp"
@@ -35,7 +36,6 @@ var config = &ssh.ClientConfig{
 var ipAndMacMapping = map[int]string{}
 
 func main() {
-
 	if !checkSwitchSg500() {
 		fmt.Println("Error : cannot get SG500")
 		return
@@ -48,13 +48,13 @@ func main() {
 func checkSwitchSg500() bool {
 		client, err := ssh.Dial("tcp", ipSw+":22", config)
 		if err != nil {
-			log.Fatal("Failed to dial: " + err.Error())
+			log.Fatalf("Failed to dial: " + err.Error())
 			return false
 		}
 		defer client.Close()
 		session, err := client.NewSession()
 		if err != nil {
-			log.Fatal("unable to create session: %s", err)
+			log.Fatalf("unable to create session: %s", err)
 			return false
 		}
 		defer session.Close()
@@ -65,20 +65,20 @@ func checkSwitchSg500() bool {
 		}
 		// Request pseudo terminal
 			if err := session.RequestPty("vt100", 0, 200, modes); err != nil {
-				log.Fatal("request for pseudo terminal failed: %s", err)
+				log.Fatalf("request for pseudo terminal failed: %s", err)
 			}
 			stdin, err := session.StdinPipe()
 			if err != nil {
-				log.Fatal("Unable to setup stdin for session: %v\n", err)
+				log.Fatalf("Unable to setup stdin for session: %v\n", err)
 			}
 
 			stdout, err := session.StdoutPipe()
 			if err != nil {
-				log.Fatal("Unable to setup stdout for session: %v\n", err)
+				log.Fatalf("Unable to setup stdout for session: %v\n", err)
 			}
 		// Start remote shell
 			if err := session.Shell(); err != nil {
-				log.Fatal("failed to start shell: %s", err)
+				log.Fatalf("failed to start shell: %s", err)
 			}
 			stdin.Write([]byte("show mac address-table\n"))
 			scanner := bufio.NewScanner(stdout)
@@ -116,7 +116,7 @@ func checkSwitchSg500() bool {
 				}
 			}
 			if err := scanner.Err(); err != nil {
-				log.Fatal("reading standard input: %s", err)
+				log.Fatalf("reading standard input: %s", err)
 			}
 
 	return true
@@ -154,9 +154,14 @@ for ip,mac := range ipAndMacMapping {
 		body = fmt.Sprintf("%s\nport-%d { hardware ethernet %s; fixed-address %s.%d; }", body, ip, mac, ipDhcpRange, ip)
 }
 
-err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
+err := ioutil.WriteFile("/etc/dhcp/dhcpd.conf", []byte(header+body), 0644)
 if err != nil {
-	log.Fatal("error writefile: %s",err)
+	log.Fatalf("error writefile: %s",err)
 }
-fmt.Println(header + body)
+cmd := exec.Command("service", "isc-dhcp-server", "restart") 
+err = cmd.Run()
+if err != nil {
+	log.Fatalf("Cannot restart service %s",err)
+}
+//fmt.Println(header + body)
 }
