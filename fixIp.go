@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"io/ioutil"
-	"os"
 	"bufio"
 	"strings"
 	"strconv"	
@@ -49,12 +48,14 @@ func main() {
 func checkSwitchSg500() bool {
 		client, err := ssh.Dial("tcp", ipSw+":22", config)
 		if err != nil {
-			panic("Failed to dial: " + err.Error())
+			log.Fatal("Failed to dial: " + err.Error())
+			return false
 		}
 		defer client.Close()
 		session, err := client.NewSession()
 		if err != nil {
-			log.Fatalf("unable to create session: %s", err)
+			log.Fatal("unable to create session: %s", err)
+			return false
 		}
 		defer session.Close()
 		// Set up terminal modes
@@ -64,20 +65,20 @@ func checkSwitchSg500() bool {
 		}
 		// Request pseudo terminal
 			if err := session.RequestPty("vt100", 0, 200, modes); err != nil {
-				log.Fatalf("request for pseudo terminal failed: %s", err)
+				log.Fatal("request for pseudo terminal failed: %s", err)
 			}
 			stdin, err := session.StdinPipe()
 			if err != nil {
-				log.Fatalf("Unable to setup stdin for session: %v\n", err)
+				log.Fatal("Unable to setup stdin for session: %v\n", err)
 			}
 
 			stdout, err := session.StdoutPipe()
 			if err != nil {
-				log.Fatalf("Unable to setup stdout for session: %v\n", err)
+				log.Fatal("Unable to setup stdout for session: %v\n", err)
 			}
 		// Start remote shell
 			if err := session.Shell(); err != nil {
-				log.Fatalf("failed to start shell: %s", err)
+				log.Fatal("failed to start shell: %s", err)
 			}
 			stdin.Write([]byte("show mac address-table\n"))
 			scanner := bufio.NewScanner(stdout)
@@ -115,7 +116,7 @@ func checkSwitchSg500() bool {
 				}
 			}
 			if err := scanner.Err(); err != nil {
-				fmt.Fprintln(os.Stderr, "reading standard input:", err)
+				log.Fatal("reading standard input: %s", err)
 			}
 
 	return true
@@ -147,6 +148,7 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 } 
 
 ######### reserv ip  ########`
+
 var body = ""
 for ip,mac := range ipAndMacMapping {
 		body = fmt.Sprintf("%s\nport-%d { hardware ethernet %s; fixed-address %s.%d; }", body, ip, mac, ipDhcpRange, ip)
@@ -154,7 +156,7 @@ for ip,mac := range ipAndMacMapping {
 
 err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
 if err != nil {
-	fmt.Printf("error writefile: %s",err)
+	log.Fatal("error writefile: %s",err)
 }
 fmt.Println(header + body)
 }
