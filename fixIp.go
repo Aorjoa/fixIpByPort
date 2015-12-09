@@ -11,8 +11,8 @@ import (
 	"strings"
 	"strconv"
 )
-var ipRange = "192.168.4"
-var linkPort = []string{"47"}
+var ipRange = "192.168.5"
+var linkPort = []string{"45","46","47","48","49","50","51","52"}
 type ResponseAuth struct {
 		Redirect	string `json:"redirect"`
 		Error		string `json:"error"`
@@ -25,23 +25,21 @@ func saveDhcpConf(){
 ############ SETTING ############
 ######### set dhcp range ########
 
-default-lease-time 600;
-max-lease-time 7200;
-subnet 192.168.4.0 netmask 255.255.255.0 {
-	range 192.168.4.11 192.168.4.200;
+default-lease-time 60000;
+max-lease-time 72000;
+subnet 192.168.5.0 netmask 255.255.255.0 {
+	range 192.168.5.11 192.168.5.200;
 	option subnet-mask 255.255.255.0;
-	option broadcast-address 192.168.4.255;
-	option routers 192.168.4.9;
+	option broadcast-address 192.168.5.255;
+	option routers 192.168.5.9;
 	option domain-name-servers 8.8.8.8, 8.8.4.4;
 	option domain-name "aiyara.lab.sut.ac.th";
 } 
 
-######### reserv ip  ########`
+######### reserved ip  ########`
 var body = ""
 for ip,mac := range ipAndMacMapping {
-	if !contains(linkPort,ip) {
-		body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
-	}
+	body = fmt.Sprintf("%s\nport-%s { hardware ethernet %s; fixed-address %s.%s; }", body, ip, mac, ipRange, ip)
 }
 err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
 if err != nil {
@@ -51,6 +49,15 @@ fmt.Println(header + body)
 }
 
 func main() {
+	//get data from SW1,SW2
+	getData(".253","SW1");
+	getData(".254","SW2");
+
+	//build configuration file
+	saveDhcpConf()
+}
+
+func getData(ipAddr string,swNo string) {
 	var err error
 	credential := map[string]string{
 		"username": "admin",
@@ -60,7 +67,7 @@ func main() {
   	cookieJar, _ := cookiejar.New(nil)
 
 	contentReader := bytes.NewReader([]byte("username="+credential["username"]+"&password="+credential["password"]))
-	req, err := http.NewRequest("POST", "http://192.168.1.1/htdocs/login/login.lua", contentReader)
+	req, err := http.NewRequest("POST", "http://"+ipRange+ipAddr+"/htdocs/login/login.lua", contentReader)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -93,7 +100,7 @@ func main() {
 	fmt.Printf("Status: %v\n", resp.Status)
 
 
-	req, err = http.NewRequest("GET", "http://192.168.1.1/htdocs/pages/base/mac_address_table.lsp", nil)
+	req, err = http.NewRequest("GET", "http://"+ipRange+ipAddr+"/htdocs/pages/base/mac_address_table.lsp", nil)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -107,19 +114,32 @@ func main() {
 		fmt.Printf("error ReadAll: %s", err)
 	}
 	bodyByLine := strings.Split(string(body),"\n")
-	//lineAttr := []string{}
+	
 	for _,line := range bodyByLine {
-		if strings.HasPrefix(line, "['") && strings.HasSuffix(line, "']")  {
+		if strings.HasPrefix(line, "['") && strings.HasSuffix(line, "']") {
 			lineAttr := strings.Split(string(line),"', '")
+
 			if _,err = strconv.Atoi(lineAttr[2]); err == nil {
-				fmt.Println(lineAttr[2] + " " + lineAttr[1])
-				ipAndMacMapping[lineAttr[2]] = lineAttr[1]
+				if contains(linkPort,lineAttr[2]) {
+					break;
+				}
+				var ipIntLogical,err = strconv.Atoi(lineAttr[2])
+				if err != nil {
+					panic("ERR : Cannot convert ip to integer")
+				}
+				if(swNo == "SW2"){
+					ipIntLogical = ipIntLogical + 44
+				}
+
+				var ipLogical = strconv.Itoa(ipIntLogical)
+				fmt.Println(ipLogical + " " + lineAttr[1])
+				ipAndMacMapping[ipLogical] = lineAttr[1]
 			}
 		}
 	}
 
 	// Logout to clear session (because it's limited).
-	req, err = http.NewRequest("GET", "http://192.168.1.1/htdocs/pages/main/logout.lsp", nil)
+	req, err = http.NewRequest("GET", "http://"+ipRange+ipAddr+"/htdocs/pages/main/logout.lsp", nil)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -127,9 +147,6 @@ func main() {
 	if err != nil {
 		fmt.Printf("error Request: %s", err)
 	}
-
-	//build configuration file
-	saveDhcpConf()
 }
 
 func contains(slice []string, element string) bool {
