@@ -146,10 +146,10 @@ subnet 192.168.4.0 netmask 255.255.255.0 {
 ######### reserv ip  ########`
 var body = ""
 for ip,mac := range ipAndMacMapping {
-		body = fmt.Sprintf("%s\nport-%d { hardware ethernet %s; fixed-address %s.%d; }", body, ip, mac, ipDhcpRange, ip)
+		body = fmt.Sprintf("%s\nhost port-%d { hardware ethernet %s; fixed-address %s.%d; }", body, ip, mac, ipDhcpRange, ip)
 }
 
-err := ioutil.WriteFile("./dhcpd.conf", []byte(header+body), 0644)
+err := ioutil.WriteFile("/etc/dhcp/dhcpd.conf", []byte(header+body), 0644)
 if err != nil {
 	fmt.Printf("error writefile: %s",err)
 }
